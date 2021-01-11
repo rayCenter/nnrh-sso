@@ -15,12 +15,9 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 
-public class SsoFilter implements Filter {
+public class SsoFilter implements Filter, ISsoHook {
 
     private final static AntPathMatcher ANT_PATH_MATCHER = new AntPathMatcher();
-    private static final String SSO_CODE = "ssoCode";
-    private static final String SSO_TOKEN = "ssoToken";
-    private static final String SSO_USER_INFO = "ssoUserInfo";
 
     @Override
     public void init(FilterConfig filterConfig) {
@@ -35,30 +32,23 @@ public class SsoFilter implements Filter {
         request.setCharacterEncoding(StandardCharsets.UTF_8.name());
         response.setCharacterEncoding(StandardCharsets.UTF_8.name());
 
-        if (checkAppIgnoreCertify()) {
+        if (checkAppIgnoreCertify() || checkAppLogout(request) || checkAppIgnoreCertifyPaths(request)) {
             filterChain.doFilter(servletRequest, servletResponse);
             return;
         }
 
-        if (checkAppLogout(request)) {
-            response.sendRedirect(getLogoutUrl(request));
-            return;
-        }
-
-        if (checkAppIgnoreCertifyPaths(request)) {
-            filterChain.doFilter(request, response);
-            return;
-        }
-
-        if (checkSsoCode(request) && checkSsoToken(request) && checkSsoUserInfo(request)) {
-            if (!checkAppLogin(request)) {
-                filterChain.doFilter(request, response);
-            } else {
-                request.getRequestDispatcher(SsoProperties.APP_CERTIFY_CHECK_PASSED_PATH).forward(request, response);
-            }
-        } else {
+        String authorizationCode = request.getParameter("code");
+        if (SsoUtils.isBlank(authorizationCode)) {
             response.sendRedirect(getSsoCodeUrl(request));
+            return;
+        } else {
+            SsoTokenInfoDto ssoTokenInfoDto = getSsoTokenInfo(authorizationCode, request);
+            SsoUserInfoDto ssoUserInfoDto = getSsoUserInfo(ssoTokenInfoDto.getAccess_token());
+            getSsoInfo(authorizationCode, ssoTokenInfoDto, ssoUserInfoDto);
         }
+
+        filterChain.doFilter(servletRequest, servletResponse);
+
     }
 
     @Override
@@ -69,51 +59,11 @@ public class SsoFilter implements Filter {
         return SsoProperties.APP_IGNORE_CERTIFY;
     }
 
-    private boolean checkAppLogout(HttpServletRequest request) {
-        if (ANT_PATH_MATCHER.match(SsoProperties.APP_LOGOUT_PATH, getRequestURI(request))) {
-            request.getSession().removeAttribute(SsoFilter.SSO_CODE);
-            request.getSession().removeAttribute(SsoFilter.SSO_TOKEN);
-            request.getSession().removeAttribute(SsoFilter.SSO_USER_INFO);
-            return true;
-        }
-        return false;
-    }
-
-    private boolean checkAppIgnoreCertifyPaths(HttpServletRequest request) {
-        String requestURI = getRequestURI(request);
-        for (String appIgnoreCertifyPath : SsoProperties.APP_IGNORE_CERTIFY_PATHS) {
-            if (ANT_PATH_MATCHER.match(appIgnoreCertifyPath, requestURI)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private boolean checkSsoCode(HttpServletRequest request) {
-        Object ssoCodeVal = request.getSession().getAttribute(SsoFilter.SSO_CODE);
-        String code = request.getParameter("code");
-        if (SsoUtils.isNotEmpty(ssoCodeVal)) {
-            if (SsoUtils.isNotBlank(code)) {
-                request.getSession().setAttribute(SsoFilter.SSO_CODE, code);
-            }
-        } else {
-            if (SsoUtils.isBlank(code)) {
-                return false;
-            }
-            request.getSession().setAttribute(SsoFilter.SSO_CODE, code);
-        }
-        return true;
-    }
-
-    private boolean checkSsoToken(HttpServletRequest request) {
-        if (SsoUtils.isNotEmpty(request.getSession().getAttribute(SsoFilter.SSO_TOKEN))) {
-            return true;
-        }
+    private SsoTokenInfoDto getSsoTokenInfo(String authorizationCode, HttpServletRequest request) {
         String httpUrl = String.format("%s%s", SsoProperties.SSO_CENTER_URL, SsoProperties.SSO_CENTER_GET_TOKEN_PATH);
         String clientId = SsoProperties.APP_ID;
         String clientSecret = SsoProperties.APP_CLIENT_SECRET;
         String redirectUrL = getRequestURL(request);
-        String code = request.getSession().getAttribute(SsoFilter.SSO_CODE).toString();
         String responseBody;
         try {
             responseBody = SsoUtils.postForm(httpUrl, new HashMap<String, String>() {{
@@ -121,32 +71,23 @@ public class SsoFilter implements Filter {
                 put("client_secret", clientSecret);
                 put("grant_type", "authorization_code");
                 put("redirect_uri", redirectUrL);
-                put("code", code);
+                put("code", authorizationCode);
             }});
-
         } catch (Exception e) {
             throw new JsonException("-1", "获取token，http请求失败", null);
         }
         if (SsoUtils.isNotBlank(responseBody)) {
             try {
-                SsoTokenInfoDto ssoTokenInfoDto = JSON.parseObject(responseBody, SsoTokenInfoDto.class);
-                request.getSession().setAttribute(SsoFilter.SSO_TOKEN, ssoTokenInfoDto);
+                return JSON.parseObject(responseBody, SsoTokenInfoDto.class);
             } catch (Exception e) {
                 throw new JsonException("-1", String.format("token信息错误：[%s]", responseBody), null);
             }
-            return true;
         }
-        throw new JsonException("-1", "获取token为空", null);
+        return null;
     }
 
-    private boolean checkSsoUserInfo(HttpServletRequest request) {
-        SsoUserInfoDto ssoUserInfoDto = (SsoUserInfoDto) request.getSession().getAttribute(SsoFilter.SSO_USER_INFO);
-        if (SsoUtils.isNotEmpty(ssoUserInfoDto)) {
-            return true;
-        }
+    private SsoUserInfoDto getSsoUserInfo(String token) {
         String httpUrl = String.format("%s%s", SsoProperties.SSO_CENTER_URL, SsoProperties.SSO_CENTER_GET_USER_INFO_PATH);
-        SsoTokenInfoDto ssoTokenInfoDto = (SsoTokenInfoDto) request.getSession().getAttribute(SsoFilter.SSO_TOKEN);
-        String token = ssoTokenInfoDto.getAccess_token();
         String responseBody;
         try {
             responseBody = SsoUtils.postForm(httpUrl, new HashMap<String, String>() {{
@@ -157,31 +98,26 @@ public class SsoFilter implements Filter {
         }
         if (SsoUtils.isNotBlank(responseBody)) {
             try {
-                ssoUserInfoDto = JSON.parseObject(responseBody, SsoUserInfoDto.class);
-                request.getSession().setAttribute(SsoFilter.SSO_USER_INFO, ssoUserInfoDto);
+                return JSON.parseObject(responseBody, SsoUserInfoDto.class);
             } catch (Exception e) {
                 throw new JsonException("-1", String.format("token信息错误：[%s]", responseBody), null);
             }
-            return true;
         }
-        throw new JsonException("-1", "获取用户信息为空", null);
+        return null;
     }
 
-    private boolean checkAppLogin(HttpServletRequest request) {
+    private boolean checkAppLogout(HttpServletRequest request) {
+        return ANT_PATH_MATCHER.match(SsoProperties.APP_LOGOUT_PATH, getRequestURI(request));
+    }
+
+    private boolean checkAppIgnoreCertifyPaths(HttpServletRequest request) {
         String requestURI = getRequestURI(request);
-        for (String appLoginPath : SsoProperties.APP_LOGIN_PATHS) {
-            if (ANT_PATH_MATCHER.match(appLoginPath, requestURI)) {
+        for (String appIgnoreCertifyPath : SsoProperties.APP_IGNORE_CERTIFY_PATHS) {
+            if (ANT_PATH_MATCHER.match(appIgnoreCertifyPath, requestURI)) {
                 return true;
             }
         }
         return false;
-    }
-
-    private String getLogoutUrl(HttpServletRequest request) {
-        return String.format("%s%s?redirectUrl=%s",
-                SsoProperties.SSO_CENTER_URL,
-                SsoProperties.SSO_CENTER_LOGOUT_PATH,
-                getRequestURL(request));
     }
 
     private String getSsoCodeUrl(HttpServletRequest request) {
@@ -200,5 +136,11 @@ public class SsoFilter implements Filter {
     private String getRequestURI(HttpServletRequest request) {
         return request.getRequestURI();
     }
+
+    @Override
+    public void getSsoInfo(String authorizationCode, SsoTokenInfoDto ssoTokenInfoDto, SsoUserInfoDto ssoUserInfoDto) {
+        System.out.println(0);
+    }
+
 
 }
