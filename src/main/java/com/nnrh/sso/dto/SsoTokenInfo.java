@@ -1,6 +1,6 @@
 package com.nnrh.sso.dto;
 
-public class SsoTokenInfoDto {
+public class SsoTokenInfo {
 
     private String access_token;
 

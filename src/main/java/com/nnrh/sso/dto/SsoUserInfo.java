@@ -1,6 +1,6 @@
 package com.nnrh.sso.dto;
 
-public class SsoUserInfoDto {
+public class SsoUserInfo {
 
     private String loginName;
 
