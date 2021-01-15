@@ -21,7 +21,7 @@ public class ActiveMqTopicConsumer {
         connection.start();
 
         Session session = connection.createSession(false, Session.AUTO_ACKNOWLEDGE);
-        Topic topic = session.createTopic(TOPIC_NAME_ORG);
+        Topic topic = session.createTopic(TOPIC_NAME_USER);
         TopicSubscriber topicSubscriber = session.createDurableSubscriber(topic, "remark");
         connection.start();
 

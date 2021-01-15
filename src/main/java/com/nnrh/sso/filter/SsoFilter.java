@@ -21,6 +21,8 @@ public class SsoFilter implements Filter {
 
     private final static AntPathMatcher ANT_PATH_MATCHER = new AntPathMatcher();
 
+    public static boolean SSO_VALID = true;
+
     @Override
     public void init(FilterConfig filterConfig) {
         String ssoPropertiesPath = filterConfig.getInitParameter("ssoPropertiesPath");
@@ -40,7 +42,11 @@ public class SsoFilter implements Filter {
         }
 
         if (checkAppLogout(request)) {
-            response.sendRedirect(getLogoutUrl(request));
+            if (SSO_VALID) {
+                response.sendRedirect(getLogoutUrl(request));
+            } else {
+                filterChain.doFilter(servletRequest, servletResponse);
+            }
             return;
         }
 
@@ -49,15 +55,20 @@ public class SsoFilter implements Filter {
             return;
         }
 
-        if (checkSsoCode(request) && checkSsoToken(request) && checkSsoUserInfo(request)) {
+        if ((checkSsoCode(request) && checkSsoToken(request) && checkSsoUserInfo(request)) || checkSsoSession(request)) {
+            SSO_VALID = true;
             if (checkAppLogin(request)) {
                 request.getRequestDispatcher(SsoProperties.APP_CERTIFY_CHECK_PASSED_PATH).forward(request, response);
             } else {
                 filterChain.doFilter(request, response);
             }
         } else {
-            response.sendRedirect(getSsoCodeUrl(request));
+            SSO_VALID = false;
+            // 说明：采用账号密码从sso平台登入，回调应用登录地址，检查是否返回授权码code，如果未返回走此，进应用登录页面（也就是sso所配置的地址）
+//            response.sendRedirect(getSsoCodeUrl(request));
+            filterChain.doFilter(servletRequest, servletResponse);
         }
+
     }
 
     @Override
@@ -74,7 +85,6 @@ public class SsoFilter implements Filter {
             return true;
         }
         return false;
-//        return ANT_PATH_MATCHER.match(SsoProperties.APP_LOGOUT_PATH, getRequestURI(request));
     }
 
     private boolean checkAppIgnoreCertifyPaths(HttpServletRequest request) {
@@ -127,19 +137,19 @@ public class SsoFilter implements Filter {
                 put("code", authorizationCode);
             }});
         } catch (Exception e) {
-//            throw new JsonException("-1", "获取token，http请求失败", null);
             return false;
         }
         if (SsoUtils.isBlank(responseBody)) {
-//        throw new JsonException("-1", "获取token为空", null);
             return false;
         }
         try {
             ssoTokenInfo = JSON.parseObject(responseBody, SsoTokenInfo.class);
+            if (SsoUtils.isBlank(ssoTokenInfo.getAccess_token())) {
+                return false;
+            }
             ssoInfoContext.setSsoTokenInfo(ssoTokenInfo);
             request.getSession().setAttribute(SsoFilter.SSO_INFO_CONTEXT, ssoInfoContext);
         } catch (Exception e) {
-//                throw new JsonException("-1", String.format("token信息错误：[%s]", responseBody), null);
             return false;
         }
         return true;
@@ -160,22 +170,30 @@ public class SsoFilter implements Filter {
                 put("access_token", token);
             }});
         } catch (Exception e) {
-//            throw new JsonException("-1", "获取用户信息，http请求失败", null);
             return false;
         }
         if (SsoUtils.isBlank(responseBody)) {
-//            throw new JsonException("-1", "获取用户信息为空", null);
             return false;
         }
         try {
             ssoUserInfo = JSON.parseObject(responseBody, SsoUserInfo.class);
+            if (SsoUtils.isBlank(ssoUserInfo.getLoginName())) {
+                return false;
+            }
             ssoInfoContext.setSsoUserInfo(ssoUserInfo);
             request.getSession().setAttribute(SsoFilter.SSO_INFO_CONTEXT, ssoInfoContext);
         } catch (Exception e) {
-//                throw new JsonException("-1", String.format("token信息错误：[%s]", responseBody), null);
             return false;
         }
         return true;
+    }
+
+    private boolean checkSsoSession(HttpServletRequest request) {
+        SsoInfoContext ssoInfoContext = getSsoInfoContext(request);
+        return !SsoUtils.isEmpty(ssoInfoContext)
+                && !SsoUtils.isBlank(ssoInfoContext.getAuthorizationCode())
+                && !SsoUtils.isEmpty(ssoInfoContext.getSsoTokenInfo())
+                && !SsoUtils.isEmpty(ssoInfoContext.getSsoUserInfo());
     }
 
     private boolean checkAppLogin(HttpServletRequest request) {
