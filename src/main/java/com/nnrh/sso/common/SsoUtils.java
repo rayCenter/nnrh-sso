@@ -61,6 +61,7 @@ public class SsoUtils {
             while ((line = reader.readLine()) != null) {
                 responseBodyBuilder.append(line);
             }
+            reader.close();
             connection.disconnect();
             return responseBodyBuilder.toString();
         }
