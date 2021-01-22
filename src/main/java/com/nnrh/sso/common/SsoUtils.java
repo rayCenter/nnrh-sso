@@ -37,9 +37,7 @@ public class SsoUtils {
 
     public static String postForm(String httpUrl, Map<String, String> paramMap) throws Exception {
         StringBuilder paramBuilder = new StringBuilder();
-        paramMap.forEach((key, value) -> {
-            paramBuilder.append(String.format("%s=%s&", key, value));
-        });
+        paramMap.forEach((key, value) -> paramBuilder.append(String.format("%s=%s&", key, value)));
         URL url = new URL(httpUrl);
         HttpURLConnection connection = (HttpURLConnection) url.openConnection();
 
@@ -63,8 +61,10 @@ public class SsoUtils {
             while ((line = reader.readLine()) != null) {
                 responseBodyBuilder.append(line);
             }
+            connection.disconnect();
             return responseBodyBuilder.toString();
         }
+        connection.disconnect();
         return null;
     }
 
