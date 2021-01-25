@@ -26,6 +26,18 @@ public class SsoProperties {
     public static final String SSO_CENTER_LOGOUT_PATH_KEY = "sso.center.logout.path";
     public static String SSO_CENTER_LOGOUT_PATH;
 
+    public static final String SSO_CENTER_LOGIN_API_PATH_KEY = "sso.center.login.api.path";
+    public static String SSO_CENTER_LOGIN_API_PATH;
+
+    public static final String SSO_CENTER_USERNAME_KEY = "sso.center.username";
+    public static String SSO_CENTER_USERNAME;
+
+    public static final String SSO_CENTER_PASSWORD_KEY = "sso.center.password";
+    public static String SSO_CENTER_PASSWORD;
+
+    public static final String SSO_CENTER_ORGANIZATION_API_PATH_KEY = "sso.center.organization.api.path";
+    public static String SSO_CENTER_ORGANIZATION_API_PATH;
+
     /* ------------------------------- 应用配置 ------------------------------- */
     public static final String APP_IGNORE_CERTIFY_KEY = "app.ignore.certify";
     public static boolean APP_IGNORE_CERTIFY;
@@ -121,6 +133,53 @@ public class SsoProperties {
             }
         }
 
+        Object ssoCenterLoginApiPathVal = PROPERTIES.get(SSO_CENTER_LOGIN_API_PATH_KEY);
+        if (SsoUtils.isEmpty(ssoCenterLoginApiPathVal)) {
+            throw new Error(String.format("单点配置缺失 [%s] 配置", SSO_CENTER_LOGIN_API_PATH_KEY));
+        } else {
+            String value = ssoCenterLoginApiPathVal.toString();
+            if (SsoUtils.isBlank(value)) {
+                throw new Error(String.format("单点配置 [%s] 配置，空", SSO_CENTER_LOGIN_API_PATH_KEY));
+            } else {
+                SSO_CENTER_LOGIN_API_PATH = value;
+            }
+        }
+
+        Object ssoCenterUsernameVal = PROPERTIES.get(SSO_CENTER_USERNAME_KEY);
+        if (SsoUtils.isEmpty(ssoCenterUsernameVal)) {
+            throw new Error(String.format("单点配置缺失 [%s] 配置", SSO_CENTER_USERNAME_KEY));
+        } else {
+            String value = ssoCenterUsernameVal.toString();
+            if (SsoUtils.isBlank(value)) {
+                throw new Error(String.format("单点配置 [%s] 配置，空", SSO_CENTER_USERNAME_KEY));
+            } else {
+                SSO_CENTER_USERNAME = value;
+            }
+        }
+
+        Object ssoCenterPasswordVal = PROPERTIES.get(SSO_CENTER_PASSWORD_KEY);
+        if (SsoUtils.isEmpty(ssoCenterPasswordVal)) {
+            throw new Error(String.format("单点配置缺失 [%s] 配置", SSO_CENTER_PASSWORD_KEY));
+        } else {
+            String value = ssoCenterPasswordVal.toString();
+            if (SsoUtils.isBlank(value)) {
+                throw new Error(String.format("单点配置 [%s] 配置，空", SSO_CENTER_PASSWORD_KEY));
+            } else {
+                SSO_CENTER_PASSWORD = value;
+            }
+        }
+
+        Object ssoCenterOrganizationApiPathVal = PROPERTIES.get(SSO_CENTER_ORGANIZATION_API_PATH_KEY);
+        if (SsoUtils.isEmpty(ssoCenterOrganizationApiPathVal)) {
+            throw new Error(String.format("单点配置缺失 [%s] 配置", SSO_CENTER_ORGANIZATION_API_PATH_KEY));
+        } else {
+            String value = ssoCenterOrganizationApiPathVal.toString();
+            if (SsoUtils.isBlank(value)) {
+                throw new Error(String.format("单点配置 [%s] 配置，空", SSO_CENTER_ORGANIZATION_API_PATH_KEY));
+            } else {
+                SSO_CENTER_ORGANIZATION_API_PATH = value;
+            }
+        }
         /* ------------------------------- 应用配置 ------------------------------- */
         Object appIgnoreCertifyVal = PROPERTIES.get(APP_IGNORE_CERTIFY_KEY);
         if (SsoUtils.isEmpty(appIgnoreCertifyVal)) {

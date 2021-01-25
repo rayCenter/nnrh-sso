@@ -4,6 +4,7 @@ import com.alibaba.fastjson.JSON;
 import com.nnrh.sso.dto.SsoInfoContext;
 import com.nnrh.sso.dto.SsoTokenInfo;
 import com.nnrh.sso.dto.SsoUserInfo;
+import com.nnrh.sso.dto.SsoUserLoginInfo;
 import com.nnrh.sso.properties.SsoProperties;
 import com.nnrh.sso.common.SsoUtils;
 import org.springframework.util.AntPathMatcher;
@@ -21,7 +22,7 @@ public class SsoFilter implements Filter {
 
     private final static AntPathMatcher ANT_PATH_MATCHER = new AntPathMatcher();
 
-    public static boolean SSO_VALID = true;
+    private static boolean SSO_VALID = true;
 
     @Override
     public void init(FilterConfig filterConfig) {
@@ -129,13 +130,15 @@ public class SsoFilter implements Filter {
         String authorizationCode = ssoInfoContext.getAuthorizationCode();
         String responseBody;
         try {
-            responseBody = SsoUtils.postForm(httpUrl, new HashMap<String, String>() {{
-                put("client_id", clientId);
-                put("client_secret", clientSecret);
-                put("grant_type", "authorization_code");
-                put("redirect_uri", redirectUrL);
-                put("code", authorizationCode);
-            }});
+            responseBody = SsoUtils.postFormData(httpUrl,
+                    new HashMap<String, String>() {{
+                        put("client_id", clientId);
+                        put("client_secret", clientSecret);
+                        put("grant_type", "authorization_code");
+                        put("redirect_uri", redirectUrL);
+                        put("code", authorizationCode);
+                    }},
+                    new HashMap<>());
         } catch (Exception e) {
             return false;
         }
@@ -166,9 +169,11 @@ public class SsoFilter implements Filter {
         String token = ssoTokenInfo.getAccess_token();
         String responseBody;
         try {
-            responseBody = SsoUtils.postForm(httpUrl, new HashMap<String, String>() {{
-                put("access_token", token);
-            }});
+            responseBody = SsoUtils.postFormData(httpUrl,
+                    new HashMap<String, String>() {{
+                        put("access_token", token);
+                    }},
+                    new HashMap<>());
         } catch (Exception e) {
             return false;
         }
@@ -232,5 +237,25 @@ public class SsoFilter implements Filter {
 
     private SsoInfoContext getSsoInfoContext(HttpServletRequest request) {
         return (SsoInfoContext) request.getSession().getAttribute(SsoFilter.SSO_INFO_CONTEXT);
+    }
+
+    public static String getUsernameToken() throws Exception {
+        String httpUrl = String.format("%s%s", SsoProperties.SSO_CENTER_URL, SsoProperties.SSO_CENTER_LOGIN_API_PATH);
+        String responseBody = SsoUtils.postJsonData(httpUrl,
+                new HashMap<String, String>() {{
+                    put("username", SsoProperties.SSO_CENTER_USERNAME);
+                    put("password", SsoProperties.SSO_CENTER_PASSWORD);
+                }},
+                new HashMap<>());
+        SsoUserLoginInfo ssoUserLoginInfo = JSON.parseObject(responseBody, SsoUserLoginInfo.class);
+        return SsoUtils.isEmpty(ssoUserLoginInfo) ? null : SsoUtils.isBlank(ssoUserLoginInfo.getMsg()) ? null : ssoUserLoginInfo.getMsg();
+    }
+
+    public static String getOrganizationInfo(String usernameToken) throws Exception {
+        String httpUrl = String.format("%s%s", SsoProperties.SSO_CENTER_URL, SsoProperties.SSO_CENTER_ORGANIZATION_API_PATH);
+        return SsoUtils.getJsonData(httpUrl,
+                new HashMap<String, String>() {{
+                    put("uim-login-user-id", usernameToken);
+                }});
     }
 }
